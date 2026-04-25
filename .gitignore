@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+ENV/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# SQLite (gateway data)
+gateway/data/
+*.sqlite
+*.db
+
+# Mac
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Project scratch / orchestration (Ewok-internal, not deliverable)
+.tmp/
+team-inbox/
+output/
+SESSION.md
+MEMORY.md
+
+# Cloudflare credentials (never commit)
+*.json.cred
+.cloudflared/
+
+# CLI config
+~/.ewok-lab/

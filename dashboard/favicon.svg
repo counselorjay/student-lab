@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="12" fill="#18181b"/>
+  <text x="32" y="42" text-anchor="middle"
+        font-family="ui-monospace, Menlo, Consolas, monospace"
+        font-size="28" font-weight="700" fill="#fafafa"
+        letter-spacing="-1">lab</text>
+  <circle cx="50" cy="14" r="5" fill="#10b981"/>
+</svg>

@@ -1,0 +1,130 @@
+/* ---------------------------------------------------------------------------
+   Counselor Jay AI Lab - dashboard
+   Custom CSS layered on top of Tailwind utilities. Keep this file small;
+   prefer Tailwind classes in markup. Put only things Tailwind cannot do
+   cleanly here: keyframes, dialog defaults, table polish.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+html {
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.mono { font-family: var(--mono); font-feature-settings: "tnum" 1, "ss01" 1; }
+
+/* Subtle pulsing ring on the polling indicator dot. Reduced-motion friendly. */
+.pulse-dot {
+  position: relative;
+}
+.pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 1px solid currentColor;
+  opacity: 0;
+  animation: pulse-ring 2.4s ease-out infinite;
+}
+@keyframes pulse-ring {
+  0%   { transform: scale(0.6); opacity: 0.55; }
+  80%  { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot::after { animation: none; opacity: 0; }
+}
+
+/* Numeric values that change should fade rather than snap. Used by .num-flash. */
+.num-flash {
+  transition: color 240ms ease, background-color 240ms ease;
+}
+.num-flash.flashed {
+  background-color: rgb(254 249 195); /* amber-100 */
+  color: rgb(120 53 15);              /* amber-900 */
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .num-flash { transition: none; }
+  .num-flash.flashed { background-color: transparent; color: inherit; }
+}
+
+/* Native <dialog> - Tailwind can do most of this but defaults are noisy. */
+dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: 92vw;
+}
+dialog::backdrop {
+  background: rgba(24, 24, 27, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+/* Table polish: tabular nums + hover row */
+.req-table tbody tr:hover {
+  background-color: rgb(250 250 250);
+}
+.req-table td, .req-table th {
+  white-space: nowrap;
+}
+
+/* Tiny status dot with consistent size everywhere */
+.dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+.dot.online    { background-color: rgb(16 185 129); }   /* emerald-500 */
+.dot.degraded  { background-color: rgb(245 158 11); }   /* amber-500 */
+.dot.offline   { background-color: rgb(244 63 94); }    /* rose-500 */
+.dot.unknown   { background-color: rgb(161 161 170); }  /* zinc-400 */
+
+/* Progress bar fill colors react to fullness */
+.bar-track {
+  background-color: rgb(244 244 245); /* zinc-100 */
+  height: 8px;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 320ms ease;
+}
+.bar-fill.low    { background-color: rgb(16 185 129); }
+.bar-fill.mid    { background-color: rgb(245 158 11); }
+.bar-fill.high   { background-color: rgb(244 63 94); }
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill { transition: none; }
+}
+
+/* Skeleton shimmer for first paint */
+.skeleton {
+  background: linear-gradient(90deg, #f4f4f5 0%, #e4e4e7 50%, #f4f4f5 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s infinite linear;
+  border-radius: 4px;
+  color: transparent;
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+/* Focus ring consistent with zinc palette */
+:where(button, a, input, select, [tabindex]):focus-visible {
+  outline: 2px solid rgb(24 24 27);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

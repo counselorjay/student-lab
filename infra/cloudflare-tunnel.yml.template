@@ -1,0 +1,13 @@
+# Cloudflared config for the student-lab tunnel.
+# Lives at /Users/sophie/.cloudflared/config-student-lab.yml on M5 Pro.
+# Replace <TUNNEL_UUID> after running `cloudflared tunnel create student-lab`.
+
+tunnel: <TUNNEL_UUID>
+credentials-file: /Users/sophie/.cloudflared/<TUNNEL_UUID>.json
+
+# Single hostname per tunnel (per Felix's recommendation: dedicated tunnel,
+# avoids the union-of-hostnames footgun the shared fit-site UUID has).
+ingress:
+  - hostname: lab.counselorjay.com
+    service: http://localhost:8700
+  - service: http_status:404

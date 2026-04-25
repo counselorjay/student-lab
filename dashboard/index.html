@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Counselor Jay AI Lab</title>
+  <meta name="description" content="Internal control panel for the Counselor Jay AI Lab gateway." />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <meta name="robots" content="noindex, nofollow" />
+
+  <!-- Tailwind via CDN (per brief, no build step for v1). -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['ui-monospace', 'SF Mono', 'Menlo', 'Consolas', 'JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="bg-zinc-50 text-zinc-900 min-h-screen">
+
+  <!-- ---- Header ----------------------------------------------------------- -->
+  <header class="border-b border-zinc-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <span id="overall-dot" class="dot unknown" aria-hidden="true"></span>
+        <h1 class="text-base font-semibold tracking-tight truncate">Counselor Jay AI Lab</h1>
+        <span id="overall-label" class="text-xs text-zinc-500 mono hidden sm:inline">checking</span>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <span id="user-email" class="mono text-zinc-600 truncate max-w-[14rem] sm:max-w-xs">…</span>
+        <button id="logout-btn"
+                class="text-xs text-zinc-500 hover:text-zinc-900 underline-offset-2 hover:underline">
+          log out
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl px-6 py-8 space-y-10">
+
+    <!-- ---- Backend status grid (always visible, public, no auth) -------- -->
+    <section aria-labelledby="backends-h">
+      <div class="flex items-baseline justify-between mb-3">
+        <h2 id="backends-h" class="text-sm font-semibold text-zinc-900 uppercase tracking-wider">
+          Backends
+        </h2>
+        <span class="flex items-center gap-1.5 text-[11px] text-zinc-500 mono">
+          <span class="dot online pulse-dot" aria-hidden="true"></span>
+          live, every 3s
+        </span>
+      </div>
+      <div id="backend-grid" class="grid gap-3 sm:grid-cols-2">
+        <!-- cards rendered by JS; skeletons until first paint -->
+        <div class="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div class="skeleton h-4 w-24 mb-3">.</div>
+          <div class="skeleton h-3 w-full mb-2">.</div>
+          <div class="skeleton h-3 w-3/4">.</div>
+        </div>
+        <div class="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div class="skeleton h-4 w-24 mb-3">.</div>
+          <div class="skeleton h-3 w-full mb-2">.</div>
+          <div class="skeleton h-3 w-3/4">.</div>
+        </div>
+      </div>
+      <p id="queue-summary" class="mt-3 text-xs text-zinc-500 mono"></p>
+    </section>
+
+    <!-- ---- Identity-state banners (mutually exclusive, JS toggles) ------ -->
+
+    <!-- CF Access required (whoami returned 401 or network) -->
+    <section id="identity-state-cf"
+             class="hidden rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-sm">
+      <h2 class="text-sm font-semibold text-amber-900 uppercase tracking-wider mb-1">
+        Sign in required
+      </h2>
+      <p class="text-sm text-amber-900">
+        Open this page through
+        <a class="font-medium underline underline-offset-2"
+           href="https://lab.counselorjay.com/dashboard/">lab.counselorjay.com</a>.
+        Cloudflare Access protects identity here, so the dashboard cannot tell who
+        you are without that sign-in step.
+      </p>
+    </section>
+
+    <!-- Authenticated, but no User row in the lab DB yet -->
+    <section id="identity-state-pending"
+             class="hidden rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+      <h2 class="text-sm font-semibold text-zinc-900 uppercase tracking-wider mb-1">
+        Almost there
+      </h2>
+      <p class="text-sm text-zinc-700">
+        You are signed in as <span id="pending-email" class="mono">you</span>, but
+        Jay has not added you to the lab yet. Email
+        <a class="font-medium underline underline-offset-2"
+           href="mailto:jay@counselorjay.com">jay@counselorjay.com</a>
+        and he will create your account.
+      </p>
+    </section>
+
+    <!-- First admin login: no User row, but is_admin=true via env match -->
+    <section id="identity-state-mint"
+             class="hidden rounded-lg border border-zinc-900 bg-zinc-900 text-zinc-50 p-5 shadow-sm">
+      <h2 class="text-sm font-semibold uppercase tracking-wider mb-1">
+        Welcome, admin
+      </h2>
+      <p class="text-sm text-zinc-300 mb-4">
+        Signed in as <span id="mint-first-email" class="mono">your account</span>.
+        You do not have an API key yet. Mint one to get started, then point your
+        CLI or any Ollama-aware tool at the gateway.
+      </p>
+      <button id="mint-first-key-btn"
+              class="text-sm px-4 py-2 rounded-md bg-white text-zinc-900 font-medium hover:bg-zinc-100">
+        Mint your first key
+      </button>
+      <p class="mt-3 text-[11px] text-zinc-400 mono">
+        The plaintext key is shown once after mint. Copy it then.
+      </p>
+    </section>
+
+    <!-- ---- Main app (everything below requires a resolved User row) ----- -->
+    <div id="main-app" class="hidden space-y-10">
+
+      <!-- ---- My usage today --------------------------------------------- -->
+      <section aria-labelledby="usage-h">
+        <div class="flex items-baseline justify-between mb-3">
+          <h2 id="usage-h" class="text-sm font-semibold text-zinc-900 uppercase tracking-wider">
+            My usage today
+          </h2>
+          <span class="flex items-center gap-1.5 text-[11px] text-zinc-500 mono">
+            <span class="dot online pulse-dot" aria-hidden="true"></span>
+            every 10s
+          </span>
+        </div>
+        <div class="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+              <div class="flex items-baseline justify-between mb-1.5">
+                <span class="text-xs text-zinc-500 uppercase tracking-wider">Requests</span>
+                <span class="mono text-sm">
+                  <span id="req-used" class="num-flash font-semibold">…</span>
+                  <span class="text-zinc-400"> / </span>
+                  <span id="req-limit" class="text-zinc-500">…</span>
+                </span>
+              </div>
+              <div class="bar-track" role="progressbar" aria-label="Requests used today">
+                <div id="req-bar" class="bar-fill low" style="width: 0%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex items-baseline justify-between mb-1.5">
+                <span class="text-xs text-zinc-500 uppercase tracking-wider">Tokens</span>
+                <span class="mono text-sm">
+                  <span id="tok-used" class="num-flash font-semibold">…</span>
+                  <span class="text-zinc-400"> / </span>
+                  <span id="tok-limit" class="text-zinc-500">…</span>
+                </span>
+              </div>
+              <div class="bar-track" role="progressbar" aria-label="Tokens used today">
+                <div id="tok-bar" class="bar-fill low" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6">
+            <h3 class="text-xs text-zinc-500 uppercase tracking-wider mb-2">Last 10 requests</h3>
+            <div class="overflow-x-auto">
+              <table class="req-table w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-zinc-500 border-b border-zinc-200">
+                    <th class="py-2 pr-3 font-medium">When</th>
+                    <th class="py-2 pr-3 font-medium">Model</th>
+                    <th class="py-2 pr-3 font-medium">Backend</th>
+                    <th class="py-2 pr-3 font-medium text-right">Latency</th>
+                    <th class="py-2 pl-3 font-medium text-right">Tokens</th>
+                  </tr>
+                </thead>
+                <tbody id="req-rows" class="mono text-[13px]">
+                  <tr><td colspan="5" class="py-4 text-center text-zinc-400">Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---- API keys --------------------------------------------------- -->
+      <section aria-labelledby="keys-h">
+        <div class="flex items-baseline justify-between mb-3">
+          <h2 id="keys-h" class="text-sm font-semibold text-zinc-900 uppercase tracking-wider">
+            My API keys
+          </h2>
+          <button id="mint-key-btn"
+                  class="hidden text-xs px-2.5 py-1.5 rounded-md border border-zinc-300 bg-white hover:bg-zinc-100">
+            Mint key
+          </button>
+        </div>
+        <div class="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+          <div id="keys-list" class="divide-y divide-zinc-100"></div>
+          <p id="keys-help" class="mt-4 text-xs text-zinc-500">
+            Need a new key? Ask Jay.
+          </p>
+        </div>
+      </section>
+
+      <!-- ---- Quickstart ------------------------------------------------- -->
+      <section aria-labelledby="quickstart-h">
+        <h2 id="quickstart-h" class="text-sm font-semibold text-zinc-900 uppercase tracking-wider mb-3">
+          Quickstart
+        </h2>
+        <div class="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+          <p class="text-sm text-zinc-700 mb-2">
+            New here? Start with the onboarding doc.
+          </p>
+          <p class="text-sm">
+            <a id="onboarding-link"
+               class="font-medium text-zinc-900 underline underline-offset-2 hover:text-zinc-600"
+               href="./onboarding.html">
+              Read the student onboarding guide
+            </a>
+          </p>
+          <pre class="mt-4 mono text-[12px] bg-zinc-900 text-zinc-100 rounded-md p-3 overflow-x-auto">pip install git+https://github.com/sophieclawjay/student-lab#subdirectory=cli
+ewok-lab login            # paste your key from above
+ewok-lab serve            # then point any Ollama-aware tool at http://localhost:11435</pre>
+        </div>
+      </section>
+
+      <!-- ---- Admin panel ------------------------------------------------ -->
+      <section id="admin-section" aria-labelledby="admin-h" class="hidden">
+        <h2 id="admin-h" class="text-sm font-semibold text-zinc-900 uppercase tracking-wider mb-3">
+          Admin
+        </h2>
+
+        <div class="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm space-y-6">
+
+          <div>
+            <h3 class="text-xs text-zinc-500 uppercase tracking-wider mb-2">Users</h3>
+            <div class="overflow-x-auto">
+              <table class="req-table w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-zinc-500 border-b border-zinc-200">
+                    <th class="py-2 pr-3 font-medium">Email</th>
+                    <th class="py-2 pr-3 font-medium">Name</th>
+                    <th class="py-2 pr-3 font-medium text-right">Reqs today</th>
+                    <th class="py-2 pr-3 font-medium text-right">Tokens today</th>
+                    <th class="py-2 pl-3 font-medium">Last seen</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-users" class="mono text-[13px]"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-xs text-zinc-500 uppercase tracking-wider mb-2">Create user</h3>
+            <form id="create-user-form" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label class="text-xs text-zinc-600 flex flex-col gap-1">
+                Email
+                <input name="email" type="email" required
+                       class="px-2.5 py-1.5 text-sm border border-zinc-300 rounded-md mono" />
+              </label>
+              <label class="text-xs text-zinc-600 flex flex-col gap-1">
+                Name
+                <input name="name" type="text" required
+                       class="px-2.5 py-1.5 text-sm border border-zinc-300 rounded-md" />
+              </label>
+              <label class="text-xs text-zinc-600 flex flex-col gap-1">
+                Daily requests
+                <input name="daily_request_limit" type="number" min="1" value="200"
+                       class="px-2.5 py-1.5 text-sm border border-zinc-300 rounded-md mono" />
+              </label>
+              <label class="text-xs text-zinc-600 flex flex-col gap-1">
+                Daily tokens
+                <input name="daily_token_limit" type="number" min="1" value="500000"
+                       class="px-2.5 py-1.5 text-sm border border-zinc-300 rounded-md mono" />
+              </label>
+              <div class="sm:col-span-2 lg:col-span-4 flex items-center gap-3">
+                <button type="submit"
+                        class="text-xs px-3 py-1.5 rounded-md bg-zinc-900 text-white hover:bg-zinc-800">
+                  Create user
+                </button>
+                <span id="create-user-status" class="text-xs text-zinc-500"></span>
+              </div>
+            </form>
+          </div>
+
+          <div>
+            <h3 class="text-xs text-zinc-500 uppercase tracking-wider mb-2">Recent activity (all users)</h3>
+            <div class="overflow-x-auto">
+              <table class="req-table w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs text-zinc-500 border-b border-zinc-200">
+                    <th class="py-2 pr-3 font-medium">When</th>
+                    <th class="py-2 pr-3 font-medium">User</th>
+                    <th class="py-2 pr-3 font-medium">Model</th>
+                    <th class="py-2 pr-3 font-medium">Backend</th>
+                    <th class="py-2 pr-3 font-medium text-right">Latency</th>
+                    <th class="py-2 pl-3 font-medium text-right">Tokens</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-feed" class="mono text-[13px]"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </div><!-- /#main-app -->
+
+    <!-- ---- Developer affordance (shown only with ?dev=1) ---------------- -->
+    <section id="dev-affordance"
+             class="hidden rounded-lg border border-dashed border-zinc-300 bg-zinc-100 p-4 text-xs text-zinc-600">
+      <span class="uppercase tracking-wider font-semibold mr-2">Dev</span>
+      Paste-key flow is exposed in this mode for QA against a running gateway
+      without Cloudflare Access.
+      <a id="dev-paste-key-link" href="#"
+         class="ml-1 underline underline-offset-2 hover:text-zinc-900">
+        Test API key from browser
+      </a>.
+    </section>
+
+    <footer class="pt-6 pb-2 text-[11px] text-zinc-400 mono flex items-center justify-between">
+      <span>lab.counselorjay.com</span>
+      <span id="gateway-target"></span>
+    </footer>
+  </main>
+
+  <!-- ---- API key prompt dialog (dev affordance only) ------------------- -->
+  <dialog id="key-dialog" aria-labelledby="key-dialog-h">
+    <div class="bg-white rounded-lg shadow-sm border border-zinc-200 p-6 w-[28rem] max-w-full">
+      <h2 id="key-dialog-h" class="text-base font-semibold mb-1">Enter your API key</h2>
+      <p class="text-sm text-zinc-600 mb-4">
+        Paste the key Jay sent you. Keys start with <span class="mono">slk_</span>.
+      </p>
+      <form id="key-form" class="space-y-3">
+        <input id="key-input" type="password" required autocomplete="off"
+               placeholder="slk_…"
+               class="w-full px-3 py-2 text-sm border border-zinc-300 rounded-md mono" />
+        <p id="key-error" class="text-xs text-rose-600 hidden"></p>
+        <div class="flex items-center justify-end gap-2">
+          <button type="button" id="key-cancel"
+                  class="text-xs px-3 py-1.5 rounded-md border border-zinc-300 hover:bg-zinc-100">
+            Cancel
+          </button>
+          <button type="submit"
+                  class="text-xs px-3 py-1.5 rounded-md bg-zinc-900 text-white hover:bg-zinc-800">
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- ---- Newly minted key dialog --------------------------------------- -->
+  <dialog id="minted-dialog" aria-labelledby="minted-dialog-h">
+    <div class="bg-white rounded-lg shadow-sm border border-zinc-200 p-6 w-[32rem] max-w-full">
+      <h2 id="minted-dialog-h" class="text-base font-semibold mb-1">New API key</h2>
+      <p id="minted-lead" class="text-sm text-zinc-600 mb-3">
+        Copy this now. It is shown only once and cannot be retrieved later.
+      </p>
+      <div class="flex items-center gap-2 mb-4">
+        <input id="minted-value" readonly
+               class="flex-1 px-3 py-2 text-sm border border-zinc-300 rounded-md mono bg-zinc-50" />
+        <button type="button" id="minted-copy"
+                class="text-xs px-3 py-2 rounded-md border border-zinc-300 hover:bg-zinc-100">
+          Copy
+        </button>
+      </div>
+      <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-4">
+        Heads up: store this key in a password manager or your CLI config now.
+        If you close this dialog without copying, you will need to mint a new key.
+      </p>
+      <div class="flex items-center justify-end">
+        <button type="button" id="minted-close"
+                class="text-xs px-3 py-1.5 rounded-md bg-zinc-900 text-white hover:bg-zinc-800">
+          Done
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>
