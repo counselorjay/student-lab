@@ -1,51 +1,36 @@
 # Student Lab
 
-Authenticated gateway giving a small set of trusted students access to a local Ollama fleet, without Tailscale and without shell access. Lives at [lab.counselorjay.com](https://lab.counselorjay.com).
+A small set of trusted students get authenticated access to Jay's home AI servers (Apple Silicon Macs running Ollama) by joining his Tailscale network and SSHing directly to the hosts.
 
-## What's inside
-
-| Folder | What it does |
-|---|---|
-| `gateway/` | FastAPI app on M5 Pro `:8700`. API-key auth, per-user quotas, request logging, model-aware routing, qwen3.6 lockout. |
-| `cli/` | `ewok-lab` Python CLI. `login`, `status`, `models`, `chat`, and `serve` (a localhost Ollama-compatible proxy). |
-| `dashboard/` | Vanilla HTML + JS dashboard at `/dashboard/`. Cloudflare Access-gated. |
-| `docs/` | Student onboarding (`student-onboarding.md`) and the orchestrator-plus-muscle CLAUDE.md template (`claude-md-template.md`). |
-| `infra/` | launchd plists and the cloudflared tunnel template. Run-from-M5-Pro deploy scripts. |
-| `ARCHITECTURE.md` | Source of truth for the design contract. Read before changing routes, schema, or auth. |
-| `gateway/ROUTING.md` | Routing and queueing spec. Read before changing `app/router.py`. |
+**Current architecture (v2, 2026-04-25):** Tailscale + SSH + a CLAUDE.md template. No gateway, no API keys, no dashboard.
 
 ## Getting started (students)
 
-Read [`docs/student-onboarding.md`](docs/student-onboarding.md). Five-minute walkthrough from accepting the email invite to your first inference call.
+Read [`docs/student-onboarding.md`](docs/student-onboarding.md) for the full walkthrough. Five-minute path: accept Jay's Tailscale invite, install Tailscale, SSH to `m5-max`, run `ollama`.
 
 For the orchestrator-plus-muscle Claude Code pattern, drop [`docs/claude-md-template.md`](docs/claude-md-template.md) into your project as `CLAUDE.md`.
 
-## Running the gateway locally (admin)
+## Setting up the hosts (Jay)
 
-```bash
-cd gateway
-python3.11 -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'
-cp .env.example .env
-python -m app.bootstrap admin jay@counselorjay.com --name "Jay"
-uvicorn app.main:app --port 8700
-```
+[`docs/lab-host-setup.md`](docs/lab-host-setup.md) is the runbook for provisioning M5 Max + M5 Pro with the shared `student` account and enabling Tailscale SSH.
 
-Tests: `cd gateway && pytest -q`.
-
-## Production deploy
-
-See [`infra/README.md`](infra/README.md) for the full M5 Pro install + Cloudflare cutover runbook.
+[`docs/tailscale-acl.md`](docs/tailscale-acl.md) has the ACL JSON to paste into `login.tailscale.com/admin/acls`. It allows tagged students to SSH only to the lab hosts as the `student` user.
 
 ## Fleet
 
-Two backends in the student rotation:
-- **M5 Max** (primary) — `100.83.184.88:11434`
-- **M5 Pro** (secondary, also hosts the gateway) — `100.120.197.64:11434`
+Two Macs in the student rotation:
+- **M5 Max** (primary, 128GB) — Tailscale name `m5-max`. Heavy work, dense models, vision.
+- **M5 Pro** (secondary, 48GB) — Tailscale name `m5-pro`. Overflow, also hosts other FastAPI services.
 
-M3 Pro is the daily driver and is deliberately excluded from shared rotation.
+M3 Pro is Jay's daily driver and is **not** in the student rotation. The Tailscale ACL prevents student access to it.
 
-`qwen3.6:35b` family is reserved for the psychrx POC and returns 403 with a redirect message.
+`qwen3.6:35b` is reserved for Jay's psychrx POC. Students see it in `ollama list` but should not call it. There's no enforcement layer in v2 (trust model).
+
+## v1 archive
+
+The `gateway/`, `cli/`, and `dashboard/` directories are an archived v1 architecture (FastAPI + API keys + CF Access + custom dashboard). They were built and tested but never deployed. Kept in the repo as a reference for if the lab outgrows the simple Tailscale model later, or as a starting point for adding logging, quotas, and queue gates if needed in the future.
+
+`gateway/ROUTING.md` and `ARCHITECTURE.md` document that earlier design and are accurate for what's in `gateway/`. They do not describe v2.
 
 ## License
 
