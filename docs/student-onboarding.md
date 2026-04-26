@@ -231,6 +231,7 @@ The orchestrator-plus-muscle pattern in `claude-md-template.md` is built around 
 |---|---|---|
 | `tailscale status` does not show `m5-max` | You are not on the tailnet, or signed in with the wrong account. | Re-launch Tailscale, confirm you are signed in with the email Jay invited. If still missing, email Jay. |
 | `Permission denied` on SSH | Your tailnet identity is not yet on the lab ACL. | Email Jay and tell him which email you signed in with. |
+| SSH hangs even though Tailscale shows the host | A VPN on your machine (Cloudflare WARP, NordVPN, ExpressVPN, etc.) is intercepting Tailscale's routing. The connection times out silently. | Turn the VPN off and SSH again. (Real example: Zach hit this on first attempt.) |
 | `ollama: command not found` after SSH-ing in | Shell PATH issue on the host. | Report to Jay; this is a host config bug, not yours. |
 | Slow responses | Someone else is on the host, or M5 Max is loading a fresh model into memory. | `htop` on the host to confirm, or just be patient for thirty seconds. |
 | Connection works, but `ollama run` hangs | Model is being pulled or loaded. | Wait. First call to a fresh model is slow; subsequent calls are fast. |
