@@ -144,6 +144,8 @@ Most student-facing models live on **both** hosts so you can route around conten
 | `nomic-embed-text` | m5-max, m5-pro | **English embeddings.** Call via `/api/embed`. |
 | `bge-m3` | m5-max | **Multilingual embeddings.** |
 
+**Faster gemma4 on Apple Silicon (MLX):** every gemma4 size has an MLX-format companion tag — `gemma4:31b-nvfp4`, `gemma4:26b-nvfp4`, `gemma4:e4b-nvfp4` — same weights, same disk footprint, but routed through Apple's MLX framework instead of llama.cpp. Faster time-to-first-token and tokens-per-second on M5 Max / M5 Pro. Prefer these for new code; the plain `gemma4:31b` / `gemma4:26b` / `gemma4:e4b` tags stay around for compatibility with older recipes. The qwen3.5 family already runs on MLX via the `-nvfp4` suffix on the canonical tags.
+
 **Reserved (please do not call):** `qwen3.6:35b`, `qwen3.6:latest`, and `qwen3.6:35b-a3b-nvfp4` are running scheduled batch jobs — PsychRX news aggregation (daily ~7 AM cron), DentalSchool Fit synthesis runs, LSTS Vietnamese translation, and a weekly smoke-cessation digest. There's no technical block; the daemon serves any tag you ask for. But calling one of these can evict the warmed copy from VRAM, which costs the next cron 20-40 seconds of cold-load when it fires. Every use case has a non-reserved substitute in the table — pick one of those.
 
 To see what is loaded on a host right now:

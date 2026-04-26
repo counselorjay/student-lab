@@ -195,6 +195,16 @@ ssh -L 11500:localhost:11434 m5-max
 
 Most student-facing models live on both hosts — if `m5-max` is busy I switch the same call to `m5-pro` (or the reverse) without changing the model name. `qwen3.5:35b-a3b-nvfp4` is the right answer 80% of the time; reach for the M5 Max-only heavy fleet (`qwen2.5:72b`, `llama3.3:70b`, `qwen3.6:27b-coding-mxfp8`, `qwen3.6:35b-a3b-coding-nvfp4`) when the task wants more horsepower or a non-qwen voice for cross-checking.
 
+**MLX-accelerated gemma4 (faster on Apple Silicon):** for every gemma4 size, there's an `-nvfp4` MLX-format companion tag — same weights, same disk cost, but routed through Apple's MLX framework. Use these for new code:
+
+```bash
+# Faster (MLX) on Apple Silicon
+ssh m5-max 'ollama run gemma4:31b-nvfp4 "..."'
+ssh m5-pro 'ollama run gemma4:e4b-nvfp4 "..."'
+```
+
+The plain `gemma4:31b` / `gemma4:26b` / `gemma4:e4b` tags stay available for compatibility, but the `-nvfp4` variants give better TTFT and tokens/sec. The qwen3.5 family is already MLX-routed via its canonical `-nvfp4` quantization — no separate variant to chase. The 70B+ heavy models (qwen2.5:72b, llama3.3:70b) and qwen3.6:27b-coding-mxfp8 are GGUF-only on the public Ollama hub for now.
+
 A note on thinking models: every model in the table except the embedders emits a `thinking` field alongside the main response. When I use `ollama run` interactively, that's already handled. When I call the API directly, I either set `"think": false` in the request body (cleanest) or read both `message.content` and `message.thinking`.
 
 ## Lab model routing — reserved tags
