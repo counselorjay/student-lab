@@ -106,36 +106,51 @@ You should see the host listed with its tailnet IP. SSH-enabled hosts also show 
 
 ## Step D: Pre-pull the standard model fleet
 
-Pulls happen as the user who runs `ollama pull`. Pull as `student` so the cache lives in `student`'s home and they can resolve models on first call without re-pulling.
+The Ollama daemon stores models in a single shared cache per host (under the daemon-running user's home). `ollama pull` is idempotent — already-present models are skipped — so running this as `student` is safe and confirms `student`'s view sees the daemon. Run the right list per host.
 
-The canonical fleet from Felix's profile:
+**M5 Max** (heavy fleet — qwen3.6 / qwen2.5 / llama3.3 / gemma4 / both embedders):
+
+```bash
+sudo -u student -i bash -c '
+  ollama pull qwen3.6:27b-coding-mxfp8
+  ollama pull qwen3.6:35b-a3b-coding-nvfp4
+  ollama pull qwen2.5:72b-instruct-q4_K_M
+  ollama pull llama3.3:70b-instruct-q4_K_M
+  ollama pull gemma4:31b
+  ollama pull gemma4:26b
+  ollama pull nomic-embed-text
+  ollama pull bge-m3
+'
+```
+
+**M5 Pro** (qwen3.5 family + gemma4 + English embedder):
 
 ```bash
 sudo -u student -i bash -c '
   ollama pull qwen3.5:35b-a3b-nvfp4
   ollama pull qwen3.5:35b-a3b-coding-nvfp4
+  ollama pull qwen3.5:27b-q8_0
   ollama pull gemma4:31b
   ollama pull gemma4:26b
   ollama pull gemma4:e4b
-  ollama pull qwen3.5:27b-q8_0
   ollama pull nomic-embed-text
 '
 ```
 
 Notes:
 
-- M5 Max (128GB) can hold all of these comfortably and can run the dense `gemma4:31b` and `qwen3.5:27b-q8_0` without strain.
-- M5 Pro (48GB) handles all of them but should mostly serve MoE models in practice; dense models will load but evict each other.
-- `qwen3.6:35b` lives in Jay's account, not `student`'s. Don't pull it for `student`. (If `ollama list` shows it under `student`, that's a misconfig: Ollama's model store is per-user when models are pulled per-user. If you see it, just don't push students toward it.)
-- A pull is a multi-GB download per model. Total: roughly 80GB. Run on Wi-Fi with a proper power source.
+- The lists are **subsets of what the daemon already serves** — Jay's existing pulls are visible to `student` because the daemon is shared. If a host already has every line, every pull is a no-op and Step D becomes a verification rather than a download.
+- `qwen3.6:35b`, `qwen3.6:latest`, `qwen3.6:35b-a3b-nvfp4` are reserved for Jay's research workload (psychrx POC on M5 Pro). Don't add them to the student-facing list. Students ignoring the reservation costs nothing technically — it's a social rule, documented in `student-onboarding.md`.
+- M5 Max (128 GB unified) can hold most of this fleet warm at once; M5 Pro (48 GB) will rotate dense models in and out under load.
+- A fresh full pull is roughly 100 GB on M5 Max, 60 GB on M5 Pro. Run on Wi-Fi with a power adapter. On already-provisioned hosts this step is fast.
 
-Confirm:
+Confirm from inside `student`'s shell:
 
 ```bash
 sudo -u student -i ollama list
 ```
 
-You should see all seven model tags with reasonable sizes.
+The daemon's full list will print — including reserved tags. That's expected; the reservation is documented, not enforced at the daemon.
 
 ---
 

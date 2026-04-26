@@ -79,20 +79,10 @@ Paste this whole block into the ACL editor. It's a strict superset of "default p
     }
   ],
 
-  // Optional: shorter session lifetime for student tags.
-  // Keeps a forgotten laptop from being a permanent backdoor.
-  // # verify against Tailscale docs: exact key name may be "sessionDuration"
-  // # under nodeAttrs, or a top-level field; confirm in the ACL editor's hints.
-  "nodeAttrs": [
-    {
-      "target": ["tag:student"],
-      "attr":   ["funnel"]   // placeholder; remove if not needed
-    }
-  ]
 }
 ```
 
-If the ACL editor complains about `nodeAttrs` or any specific field, drop the block. The core (acls + ssh) is what enforces the access model. Tighter session expiry can be configured per-tag later via Device Approval / Device Posture once the basics are working.
+The core (`acls` + `ssh`) is what enforces the access model. Tighter session lifetimes for `tag:student` (so a forgotten laptop isn't a permanent backdoor) can be configured later via Device Approval or per-tag session duration in the admin UI; not required for the v1 cutover.
 
 ---
 
