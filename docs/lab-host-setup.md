@@ -14,7 +14,7 @@ Minimal v2 setup. The lab uses a shared `student` user account on each host, wit
 Run on M5 Max and M5 Pro. Pick a single shared password Jay can distribute to students; substitute it for `<SHARED_PASSWORD>` below.
 
 ```bash
-sudo -v   # cache sudo creds; will prompt now
+sudo -v
 
 sudo sysadminctl -addUser student \
   -fullName "Lab Student" \
@@ -22,15 +22,13 @@ sudo sysadminctl -addUser student \
   -home /Users/student \
   -shell /bin/zsh
 
-# Defensive: confirm student is NOT in admin/wheel.
+sudo createhomedir -c -u student
+
 sudo dseditgroup -o edit -d student -t user admin 2>/dev/null || true
 sudo dseditgroup -o edit -d student -t user wheel 2>/dev/null || true
 
-# Hide from the GUI login screen.
 sudo dscl . create /Users/student IsHidden 1
 
-# Set PATH so Ollama (Intel Homebrew, /usr/local/bin) and Apple Silicon
-# Homebrew (/opt/homebrew/bin) are both available.
 sudo -u student tee /Users/student/.zshrc > /dev/null <<'ZSHRC'
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 PROMPT='%n@%m %1~ %# '
@@ -38,6 +36,10 @@ ZSHRC
 sudo chown student:staff /Users/student/.zshrc
 sudo chmod 644 /Users/student/.zshrc
 ```
+
+Notes:
+- `sysadminctl` only *assigns* a home directory; it does not create one. `createhomedir -c -u student` populates `/Users/student/` from `/System/Library/User Template/` (Desktop, Documents, Library, etc.) with correct ownership. Skip it and `sudo -u student -i` will print "unable to change directory to /Users/student" forever.
+- Don't put inline `#` comments on commands you paste into zsh on macOS; default zsh doesn't honor `#` as a comment in interactive mode and it gets parsed as an argument. Comments live above the command, not on the same line.
 
 Verify:
 
