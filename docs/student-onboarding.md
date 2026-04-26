@@ -114,14 +114,16 @@ tailscale ssh student@m5-pro
 Most of your real work will run as one-shot SSH commands from your laptop, not interactive sessions. The pattern:
 
 ```
-ssh student@m5-max 'ollama run qwen3.5:35b-a3b-nvfp4 "summarize the Treaty of Westphalia in 3 bullets"'
+ssh student@m5-pro 'ollama run qwen3.5:35b-a3b-nvfp4 "summarize the Treaty of Westphalia in 3 bullets"'
 ```
 
 For longer prompts, pipe stdin:
 
 ```
-cat my-prompt.txt | ssh student@m5-max 'ollama run qwen3.5:35b-a3b-nvfp4'
+cat my-prompt.txt | ssh student@m5-pro 'ollama run qwen3.5:35b-a3b-nvfp4'
 ```
+
+Note on hosts: the general-purpose default `qwen3.5:35b-a3b-nvfp4` lives on M5 Pro. M5 Max carries heavier and code-tuned models — see the table below for which model sits where.
 
 For programmatic API access (the Ollama HTTP API on port 11434), open a port-forward in another terminal:
 
@@ -163,17 +165,22 @@ Claude Code's VS Code extension can target either your local workspace or the re
 
 The canonical list lives in Felix's fleet doc; here is the working subset for students.
 
-| Model | Use it for |
-|---|---|
-| `qwen3.5:35b-a3b-nvfp4` | **General-purpose default.** Fast MoE (35B total, 3B active). Reach for this first. Thinking model: read both `content` and `thinking` fields. |
-| `qwen3.5:35b-a3b-coding-nvfp4` | Coding-tuned variant of the default. M5 Pro only. |
-| `gemma4:31b` | **Vision** (image input) and tricky reasoning. Slower, very capable. Thinking model. |
-| `gemma4:26b` | Bulk processing, multilingual, vision fallback. 256K context. Thinking model. |
-| `gemma4:e4b` | **Fast triage and classification.** Use when you have thousands of small jobs. Thinking model. |
-| `qwen3.5:27b-q8_0` | High-precision structured extraction. Specialist, slower. M5 Pro only. |
-| `nomic-embed-text` | **Embeddings.** Call via `/api/embed`. |
+| Model | Hosts | Use it for |
+|---|---|---|
+| `qwen3.5:35b-a3b-nvfp4` | m5-pro | **General-purpose default.** Fast MoE (35B total, 3B active). Reach for this first. Thinking model: read both `content` and `thinking` fields. |
+| `qwen3.5:35b-a3b-coding-nvfp4` | m5-pro | Coding-tuned variant of the default. |
+| `qwen3.5:27b-q8_0` | m5-pro | High-precision structured extraction. Specialist, slower. |
+| `qwen3.6:27b-coding-mxfp8` | m5-max | Dense coder. Strong at JSON / structured extraction. |
+| `qwen3.6:35b-a3b-coding-nvfp4` | m5-max | Fast MoE coder for agentic loops on heavy hardware. |
+| `qwen2.5:72b-instruct-q4_K_M` | m5-max | Heavy dense reasoning. Use for second-opinion cross-checks. |
+| `llama3.3:70b-instruct-q4_K_M` | m5-max | Different 70B family from qwen — use when you want a diverse cross-check. |
+| `gemma4:31b` | m5-max, m5-pro | **Vision** (image input) and tricky reasoning. Slower, very capable. Thinking model. |
+| `gemma4:26b` | m5-max, m5-pro | Bulk processing, multilingual, vision fallback. 256K context. Thinking model. |
+| `gemma4:e4b` | m5-pro | **Fast triage and classification.** Use when you have thousands of small jobs. Thinking model. |
+| `nomic-embed-text` | m5-max, m5-pro | **English embeddings.** Call via `/api/embed`. |
+| `bge-m3` | m5-max | **Multilingual embeddings.** |
 
-**Reserved (please do not call):** `qwen3.6:35b` is locked for Jay's research. The cost to you of accidentally hitting it is zero, but please pick a different model.
+**Reserved (please do not call):** `qwen3.6:35b`, `qwen3.6:latest`, `qwen3.6:35b-a3b-nvfp4` are locked for Jay's research. The cost to you of accidentally hitting one is zero, but please pick a different model.
 
 To see what is loaded on a host right now:
 
