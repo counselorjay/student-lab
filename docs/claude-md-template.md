@@ -35,8 +35,10 @@ Jay added me to his Tailscale tailnet. That's the only network path to the hosts
 
 Two hosts (canonical Tailscale hostnames):
 
-- **`georges-macbook-pro`** (M5 Max, 128 GB). Heavy fleet — qwen3.6 dense + MoE coders, qwen2.5:72b, llama3.3:70b, gemma4 vision, bge-m3 embeddings.
-- **`sophies-macbook-pro`** (M5 Pro, 48 GB). Lighter fleet — qwen3.5 family (general default + coding + Q8), gemma4:e4b for fast triage.
+- **`georges-macbook-pro`** (M5 Max, 128 GB). Carries everything in the student-facing fleet plus M5 Max-only heavy models (qwen3.6 coders, qwen2.5:72b, llama3.3:70b, bge-m3).
+- **`sophies-macbook-pro`** (M5 Pro, 48 GB). Carries the same student-facing models, lighter and a good fallback when M5 Max is busy.
+
+Most models live on both hosts so I can route around contention — same `ollama run <model> "..."` call works against either alias. M5 Max is the better default for the heaviest jobs; M5 Pro is the better default when I just want the call to land fast and someone else has M5 Max warm.
 
 I keep an alias in my SSH config so the recipes are short:
 
@@ -178,20 +180,20 @@ ssh -L 11500:localhost:11434 m5-max
 
 | Model | Hosts | Use it for |
 |-------|-------|------------|
-| `qwen3.5:35b-a3b-nvfp4` | m5-pro | General default. Prose, code drafts, structured extraction. Fast (MoE). |
-| `qwen3.5:35b-a3b-coding-nvfp4` | m5-pro | Coding-tuned variant of the default. |
-| `qwen3.5:27b-q8_0` | m5-pro | High-precision dense Q8 for structured extraction. Specialist, slower. |
+| `qwen3.5:35b-a3b-nvfp4` | m5-max, m5-pro | General default. Prose, code drafts, structured extraction. Fast (MoE). |
+| `qwen3.5:35b-a3b-coding-nvfp4` | m5-max, m5-pro | Coding-tuned variant of the default. |
+| `qwen3.5:27b-q8_0` | m5-max, m5-pro | High-precision dense Q8 for structured extraction. Specialist, slower. |
 | `qwen3.6:27b-coding-mxfp8` | m5-max | Dense coder. Strong at JSON / structured output. |
 | `qwen3.6:35b-a3b-coding-nvfp4` | m5-max | Fast MoE coder for agentic loops on heavy hardware. |
 | `qwen2.5:72b-instruct-q4_K_M` | m5-max | Heavy dense reasoning. Use for second-opinion cross-checks. |
 | `llama3.3:70b-instruct-q4_K_M` | m5-max | Different 70B family from qwen — diverse cross-check when qwen output looks suspicious. |
 | `gemma4:31b` | m5-max, m5-pro | Vision (image input) and the trickiest reasoning. Slower, denser. |
 | `gemma4:26b` | m5-max, m5-pro | Bulk processing, multilingual, long context (256K). |
-| `gemma4:e4b` | m5-pro | Fast triage, classification at scale, anything where latency matters more than depth. |
+| `gemma4:e4b` | m5-max, m5-pro | Fast triage, classification at scale, anything where latency matters more than depth. |
 | `nomic-embed-text` | m5-max, m5-pro | English embeddings. 768-dim, 8K context. Use via `/api/embed`. |
 | `bge-m3` | m5-max | Multilingual embeddings. |
 
-`qwen3.5:35b-a3b-nvfp4` on m5-pro is the right answer 80% of the time. Reach for the M5 Max heavy fleet when the task wants more horsepower or a non-qwen voice for cross-checking.
+Most student-facing models live on both hosts — if `m5-max` is busy I switch the same call to `m5-pro` (or the reverse) without changing the model name. `qwen3.5:35b-a3b-nvfp4` is the right answer 80% of the time; reach for the M5 Max-only heavy fleet (`qwen2.5:72b`, `llama3.3:70b`, `qwen3.6:27b-coding-mxfp8`, `qwen3.6:35b-a3b-coding-nvfp4`) when the task wants more horsepower or a non-qwen voice for cross-checking.
 
 A note on thinking models: every model in the table except the embedders emits a `thinking` field alongside the main response. When I use `ollama run` interactively, that's already handled. When I call the API directly, I either set `"think": false` in the request body (cleanest) or read both `message.content` and `message.thinking`.
 

@@ -127,20 +127,20 @@ Claude Code's VS Code extension can target either your local workspace or the re
 
 ## Available models
 
-M5 Max (`georges-macbook-pro`) hosts the heavy fleet; M5 Pro (`sophies-macbook-pro`) hosts the lighter MoE workhorses + embeddings.
+Most student-facing models live on **both** hosts so you can route around contention — if M5 Max is busy with someone else's job, the same model is available on M5 Pro and vice versa. M5 Max additionally carries the heavy 70B+ cross-check fleet (qwen2.5:72b, llama3.3:70b) plus multilingual embeddings (bge-m3); the rest is symmetric.
 
 | Model | Hosts | Use it for |
 |---|---|---|
-| `qwen3.5:35b-a3b-nvfp4` | m5-pro | **General-purpose default.** Fast MoE (35B total, 3B active). Reach for this first. Thinking model: read both `content` and `thinking` fields. |
-| `qwen3.5:35b-a3b-coding-nvfp4` | m5-pro | Coding-tuned variant of the default. |
-| `qwen3.5:27b-q8_0` | m5-pro | High-precision structured extraction. Specialist, slower. |
+| `qwen3.5:35b-a3b-nvfp4` | m5-max, m5-pro | **General-purpose default.** Fast MoE (35B total, 3B active). Reach for this first. Thinking model: read both `content` and `thinking` fields. |
+| `qwen3.5:35b-a3b-coding-nvfp4` | m5-max, m5-pro | Coding-tuned variant of the default. |
+| `qwen3.5:27b-q8_0` | m5-max, m5-pro | High-precision structured extraction. Specialist, slower. |
 | `qwen3.6:27b-coding-mxfp8` | m5-max | Dense coder. Strong at JSON / structured extraction. |
 | `qwen3.6:35b-a3b-coding-nvfp4` | m5-max | Fast MoE coder for agentic loops on heavy hardware. |
 | `qwen2.5:72b-instruct-q4_K_M` | m5-max | Heavy dense reasoning. Use for second-opinion cross-checks. |
 | `llama3.3:70b-instruct-q4_K_M` | m5-max | Different 70B family from qwen — use when you want a diverse cross-check. |
 | `gemma4:31b` | m5-max, m5-pro | **Vision** (image input) and tricky reasoning. Slower, very capable. Thinking model. |
 | `gemma4:26b` | m5-max, m5-pro | Bulk processing, multilingual, vision fallback. 256K context. Thinking model. |
-| `gemma4:e4b` | m5-pro | **Fast triage and classification.** Use when you have thousands of small jobs. Thinking model. |
+| `gemma4:e4b` | m5-max, m5-pro | **Fast triage and classification.** Use when you have thousands of small jobs. Thinking model. |
 | `nomic-embed-text` | m5-max, m5-pro | **English embeddings.** Call via `/api/embed`. |
 | `bge-m3` | m5-max | **Multilingual embeddings.** |
 
