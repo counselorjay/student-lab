@@ -144,7 +144,7 @@ M5 Max (`georges-macbook-pro`) hosts the heavy fleet; M5 Pro (`sophies-macbook-p
 | `nomic-embed-text` | m5-max, m5-pro | **English embeddings.** Call via `/api/embed`. |
 | `bge-m3` | m5-max | **Multilingual embeddings.** |
 
-**Reserved (please do not call):** `qwen3.6:35b`, `qwen3.6:latest`, `qwen3.6:35b-a3b-nvfp4` are locked for Jay's research. The cost to you of accidentally hitting one is zero, but please pick a different model.
+**Reserved (please do not call):** `qwen3.6:35b`, `qwen3.6:latest`, and `qwen3.6:35b-a3b-nvfp4` are running scheduled batch jobs — PsychRX news aggregation (daily ~7 AM cron), DentalSchool Fit synthesis runs, LSTS Vietnamese translation, and a weekly smoke-cessation digest. There's no technical block; the daemon serves any tag you ask for. But calling one of these can evict the warmed copy from VRAM, which costs the next cron 20-40 seconds of cold-load when it fires. Every use case has a non-reserved substitute in the table — pick one of those.
 
 To see what is loaded on a host right now:
 

@@ -31,14 +31,14 @@ A useful test: if I'd hesitate to run something 100 times on cloud Claude becaus
 
 ## How the lab is reachable
 
-Jay added me to his Tailscale tailnet. That's the only network path to the hosts. There's no public URL, no API key, no gateway. I SSH in as the shared `student` user and use `ollama` natively, the same way I'd use it on my own machine.
+Jay added me to his Tailscale tailnet. That's the only network path to the hosts. There's no public URL, no API key, no gateway. I SSH in as the shared `student` user with the shared password Jay sent me on Discord.
 
-Two hosts:
+Two hosts (canonical Tailscale hostnames):
 
-- **`m5-max`** (primary). M5 Max, 128GB. Default destination for everything.
-- **`m5-pro`** (secondary). M5 Pro, 48GB. Use when M5 Max is busy, or when I'm pulling embeddings while a teammate has a long job on M5 Max.
+- **`georges-macbook-pro`** (M5 Max, 128 GB). Heavy fleet — qwen3.6 dense + MoE coders, qwen2.5:72b, llama3.3:70b, gemma4 vision, bge-m3 embeddings.
+- **`sophies-macbook-pro`** (M5 Pro, 48 GB). Lighter fleet — qwen3.5 family (general default + coding + Q8), gemma4:e4b for fast triage.
 
-Tailscale gives the hosts longer machine names by default (something like `georges-macbook-pro` and `sophies-mbp`). The recipes below assume I've aliased them to `m5-max` and `m5-pro` in my SSH config:
+I keep an alias in my SSH config so the recipes are short:
 
 ```
 # ~/.ssh/config
@@ -47,13 +47,11 @@ Host m5-max
     User student
 
 Host m5-pro
-    HostName sophies-mbp
+    HostName sophies-macbook-pro
     User student
 ```
 
-(Replace the `HostName` values with whatever `tailscale status` shows on my machine. Tailscale MagicDNS resolves them automatically.)
-
-Auth is handled by **Tailscale SSH**. No SSH keys to manage, no passwords. If `ssh m5-max` works, I'm in.
+Auth is **classic SSH with the shared password Jay DM'd me**. The first connection asks me to accept the host key fingerprint; type `yes` once and it's saved to `~/.ssh/known_hosts`. From then on it just prompts for the password. I can cache the password in macOS Keychain via `ssh-copy-id` if I want, but the simple flow works fine.
 
 ## Two ways to drive the lab from Claude Code
 
@@ -69,20 +67,24 @@ Use Remote-SSH when I'm doing a lot of file manipulation on the Mac (parsing a f
 
 ## Recipes
 
-Concrete bash patterns I lean on. Adjust models per task. `qwen3.5:35b-a3b-nvfp4` is the safe default for prose and code. `gemma4:31b` is stronger for vision and gnarly reasoning. `gemma4:e4b` is the fast triage option. `nomic-embed-text` is for embeddings.
+Concrete bash patterns I lean on. Pick the host that has the model — `qwen3.5:35b-a3b-nvfp4` (general default) lives on `m5-pro`; the heavy qwen3.6 / qwen2.5 / llama3.3 fleet lives on `m5-max`. `gemma4:31b` and `gemma4:26b` are on both. See the model table below for full hosting.
 
 ### Recipe 1: one-shot inference
 
 The simplest call: pipe a prompt over SSH, get a response back.
 
 ```bash
-# Quick sanity check
+# Quick sanity check (general default lives on m5-pro)
 echo "Summarize the Treaty of Westphalia in 3 bullets." \
-  | ssh m5-max 'ollama run qwen3.5:35b-a3b-nvfp4'
+  | ssh m5-pro 'ollama run qwen3.5:35b-a3b-nvfp4'
 
 # With a system prompt and a real input file
-cat input.txt | ssh m5-max 'ollama run qwen3.5:35b-a3b-nvfp4 \
+cat input.txt | ssh m5-pro 'ollama run qwen3.5:35b-a3b-nvfp4 \
   "You are a careful editor. Tighten the prose. Output only the rewrite."'
+
+# Heavier reasoning / cross-check on m5-max
+cat input.txt | ssh m5-max 'ollama run qwen2.5:72b-instruct-q4_K_M \
+  "Give me a careful second opinion on the argument in this draft."'
 ```
 
 The remote `ollama run` reads stdin until EOF, then prints the response on stdout. The pipe across SSH is transparent.
@@ -99,7 +101,7 @@ Loop locally, call the model remotely. One row at a time keeps memory tame and l
 
 tail -n +2 items.csv | while IFS= read -r line; do
   category=$(printf '%s' "$line" \
-    | ssh m5-max 'ollama run gemma4:e4b \
+    | ssh m5-pro 'ollama run gemma4:e4b \
         "Classify into one of: news, opinion, research, ad. Output only the label, nothing else."')
   printf '%s,%s\n' "$line" "$category"
 done > items_classified.csv
@@ -124,14 +126,14 @@ for pdf in papers/*.pdf; do
   text=$(pdftotext "$pdf" -)
 
   printf '%s' "$text" | ssh m5-max \
-    'ollama run --format json qwen3.5:35b-a3b-nvfp4 \
+    'ollama run --format json qwen3.6:27b-coding-mxfp8 \
       "Extract title, author, year, abstract as JSON. Use null for missing fields. Output only JSON."' \
     > "extracted/${name}.json"
 done
 ```
 
 Two things to know:
-- `--format json` is an Ollama flag that turns on JSON-mode decoding. The model will refuse to emit anything outside a valid JSON object.
+- `--format json` is an Ollama flag that turns on JSON-mode decoding. The model will refuse to emit anything outside a valid JSON object. `qwen3.6:27b-coding-mxfp8` is the dense coder on m5-max and is the best at structured JSON output. Set `"think": false` in the request body if calling via the API to suppress the thinking field; `qwen3.5:35b-a3b-nvfp4` on m5-pro also handles JSON well if you want the lighter MoE.
 - For 100+ PDFs, copy the folder to the Mac first (`rsync -av papers/ m5-max:~/papers/`) and run the loop over SSH so the data isn't crossing the wire per-file.
 
 When to escalate: I have cloud Claude review 3 sample JSONs against the source PDFs to catch systematic extraction bugs before I trust the rest.
@@ -174,20 +176,41 @@ ssh -L 11500:localhost:11434 m5-max
 
 ## Models I reach for
 
-| Model | Use it for |
-|-------|------------|
-| `qwen3.5:35b-a3b-nvfp4` | General default. Prose, code drafts, structured extraction. Fast (MoE). |
-| `qwen3.5:35b-a3b-coding-nvfp4` | Coding-tuned variant. Reach for when the task is mostly code. |
-| `gemma4:31b` | Vision tasks, the trickiest reasoning, code I want to be sure about. Slower, denser. |
-| `gemma4:26b` | Bulk processing, multilingual content, long context (256K). |
-| `gemma4:e4b` | Fast triage, classification at scale, anything where latency matters more than depth. |
-| `nomic-embed-text` | Embeddings only. Use via `/api/embed` or any Ollama-compatible client. |
+| Model | Hosts | Use it for |
+|-------|-------|------------|
+| `qwen3.5:35b-a3b-nvfp4` | m5-pro | General default. Prose, code drafts, structured extraction. Fast (MoE). |
+| `qwen3.5:35b-a3b-coding-nvfp4` | m5-pro | Coding-tuned variant of the default. |
+| `qwen3.5:27b-q8_0` | m5-pro | High-precision dense Q8 for structured extraction. Specialist, slower. |
+| `qwen3.6:27b-coding-mxfp8` | m5-max | Dense coder. Strong at JSON / structured output. |
+| `qwen3.6:35b-a3b-coding-nvfp4` | m5-max | Fast MoE coder for agentic loops on heavy hardware. |
+| `qwen2.5:72b-instruct-q4_K_M` | m5-max | Heavy dense reasoning. Use for second-opinion cross-checks. |
+| `llama3.3:70b-instruct-q4_K_M` | m5-max | Different 70B family from qwen — diverse cross-check when qwen output looks suspicious. |
+| `gemma4:31b` | m5-max, m5-pro | Vision (image input) and the trickiest reasoning. Slower, denser. |
+| `gemma4:26b` | m5-max, m5-pro | Bulk processing, multilingual, long context (256K). |
+| `gemma4:e4b` | m5-pro | Fast triage, classification at scale, anything where latency matters more than depth. |
+| `nomic-embed-text` | m5-max, m5-pro | English embeddings. 768-dim, 8K context. Use via `/api/embed`. |
+| `bge-m3` | m5-max | Multilingual embeddings. |
 
-`qwen3.5:35b-a3b-nvfp4` is the right answer 80% of the time. Reach for the others when I have a specific reason.
+`qwen3.5:35b-a3b-nvfp4` on m5-pro is the right answer 80% of the time. Reach for the M5 Max heavy fleet when the task wants more horsepower or a non-qwen voice for cross-checking.
 
-A note on thinking models: `qwen3.5:35b-a3b-nvfp4`, `gemma4:31b`, `gemma4:26b`, and `gemma4:e4b` all emit a `thinking` field alongside the main response. When I use `ollama run` interactively, that's already handled. When I call the API directly (via the port-forward), I read both `message.content` and `message.thinking` if I want the full picture; usually `message.content` is enough.
+A note on thinking models: every model in the table except the embedders emits a `thinking` field alongside the main response. When I use `ollama run` interactively, that's already handled. When I call the API directly, I either set `"think": false` in the request body (cleanest) or read both `message.content` and `message.thinking`.
 
-**Reserved:** `qwen3.6:35b` is for Jay's psychrx research. It will appear in `ollama list`. Please don't call it. There's no enforcement layer here, just trust.
+## Lab model routing — reserved tags
+
+Three model tags are reserved for Jay's scheduled batch jobs (PsychRX cron, DentalSchool Fit synthesis, LSTS Vietnamese translation, weekly smoke-cessation digest). Do **not** call any of these from this project:
+
+- `qwen3.6:35b`
+- `qwen3.6:latest` (alias of the above; same weights)
+- `qwen3.6:35b-a3b-nvfp4`
+
+If a recipe targets a reserved tag, switch to the equivalent before running:
+
+| If reaching for…                     | Use instead                                                                          |
+|--------------------------------------|--------------------------------------------------------------------------------------|
+| `qwen3.6:35b` for general/vision     | `qwen3.5:35b-a3b-nvfp4` on m5-pro, or `gemma4:26b` / `gemma4:31b` for vision         |
+| `qwen3.6:35b-a3b-nvfp4` (MoE)        | `qwen3.5:35b-a3b-nvfp4` on m5-pro, or `qwen3.6:35b-a3b-coding-nvfp4` for coding work |
+
+Hitting a reserved tag won't fail technically — but it can evict Jay's warmed copy from VRAM, costing him a 20-40 second cold-load on his next cron. Be a good neighbor.
 
 ## Etiquette
 
@@ -201,8 +224,9 @@ There's no queue gate, no rate limit, no quota. Just shared hardware. So:
 
 ## When something goes wrong
 
-- **`ssh m5-max` fails.** First check `tailscale status`. Am I connected to the tailnet? If yes, try the full Tailscale name (whatever shows in `tailscale status` for that host) instead of the alias.
-- **`ollama run` says "model not found".** The host may not have the model pulled yet. Run `ssh m5-max 'ollama list'` to see what's there. Ask Jay to pull it if it's missing.
+- **`ssh m5-max` fails.** First check `tailscale status`. Am I connected to the tailnet? If yes, try the full hostname (`georges-macbook-pro` for m5-max, `sophies-macbook-pro` for m5-pro) instead of the alias. If `Permission denied`, double-check the password Jay sent — capitalization and exclamation matter.
+- **SSH hangs even with Tailscale connected.** A VPN on my laptop (Cloudflare WARP, NordVPN, ExpressVPN, etc.) is intercepting Tailscale's routing. Turn the VPN off and try again.
+- **`ollama run` says "model not found".** The host may not have the tag I asked for — `qwen3.5` family is m5-pro only, `qwen3.6` heavy / `qwen2.5:72b` / `llama3.3:70b` / `bge-m3` are m5-max only. Check `ollama list` on the host I'm hitting.
 - **A call hangs.** The model may be loading from disk (first call after idle), or another job is holding the GPU. Check `ssh m5-max 'ps aux | grep ollama'` and give it a minute.
 - **Port 11434 in use locally.** Forward to a different port (see Recipe 4).
 
