@@ -38,7 +38,7 @@ Two hosts (canonical Tailscale hostnames):
 - **`georges-macbook-pro`** (M5 Max, 128 GB). Carries everything in the student-facing fleet plus M5 Max-only heavy models (qwen3.6 coders, qwen2.5:72b, llama3.3:70b, bge-m3).
 - **`sophies-macbook-pro`** (M5 Pro, 48 GB). Carries the same student-facing models, lighter and a good fallback when M5 Max is busy.
 
-Most models live on both hosts so I can route around contention — same `ollama run <model> "..."` call works against either alias. M5 Max is the better default for the heaviest jobs; M5 Pro is the better default when I just want the call to land fast and someone else has M5 Max warm.
+Most models live on both hosts so I can route around contention. The same `ollama run <model> "..."` call works against either alias. M5 Max is the better default for the heaviest jobs; M5 Pro is the better default when I just want the call to land fast and someone else has M5 Max warm.
 
 I keep an alias in my SSH config so the recipes are short:
 
@@ -69,19 +69,19 @@ Use Remote-SSH when I'm doing a lot of file manipulation on the Mac (parsing a f
 
 ## Recipes
 
-Concrete bash patterns I lean on. Pick the host that has the model — `qwen3.5:35b-a3b-nvfp4` (general default) lives on `m5-pro`; the heavy qwen3.6 / qwen2.5 / llama3.3 fleet lives on `m5-max`. `gemma4:31b` and `gemma4:26b` are on both. See the model table below for full hosting.
+Concrete bash patterns I lean on. Pick the host that has the model. `qwen3.6:35b` (the general default) lives on both hosts; the heavy coders (`qwen3.6:27b-coding-mxfp8`, `qwen3.6:35b-a3b-coding-nvfp4`) and the 70B+ cross-check fleet (`qwen2.5:72b`, `llama3.3:70b`) live on `m5-max`; the gemma4 family is symmetric across both hosts, with M5 Pro additionally carrying NVFP4 MLX companion tags. See the model table below for full hosting.
 
 ### Recipe 1: one-shot inference
 
 The simplest call: pipe a prompt over SSH, get a response back.
 
 ```bash
-# Quick sanity check (general default lives on m5-pro)
+# Quick sanity check (general default, lives on both hosts)
 echo "Summarize the Treaty of Westphalia in 3 bullets." \
-  | ssh m5-pro 'ollama run qwen3.5:35b-a3b-nvfp4'
+  | ssh m5-max 'ollama run qwen3.6:35b'
 
 # With a system prompt and a real input file
-cat input.txt | ssh m5-pro 'ollama run qwen3.5:35b-a3b-nvfp4 \
+cat input.txt | ssh m5-pro 'ollama run qwen3.6:35b \
   "You are a careful editor. Tighten the prose. Output only the rewrite."'
 
 # Heavier reasoning / cross-check on m5-max
@@ -115,7 +115,7 @@ When to escalate: if I see misclassifications in the obvious cases, I show 5 exa
 
 ### Recipe 3: structured extraction from PDFs
 
-`gemma4` and `qwen3.5` both support `format json` mode in Ollama, which constrains output to valid JSON. Combine that with `pdftotext` and I get a folder of structured records from a folder of papers.
+The qwen3.6 coders and the gemma4 family both support `format json` mode in Ollama, which constrains output to valid JSON. Combine that with `pdftotext` and I get a folder of structured records from a folder of papers.
 
 ```bash
 # Goal: pull {title, author, year, abstract} out of a folder of academic PDFs.
@@ -135,7 +135,7 @@ done
 ```
 
 Two things to know:
-- `--format json` is an Ollama flag that turns on JSON-mode decoding. The model will refuse to emit anything outside a valid JSON object. `qwen3.6:27b-coding-mxfp8` is the dense coder on m5-max and is the best at structured JSON output. Set `"think": false` in the request body if calling via the API to suppress the thinking field; `qwen3.5:35b-a3b-nvfp4` on m5-pro also handles JSON well if you want the lighter MoE.
+- `--format json` is an Ollama flag that turns on JSON-mode decoding. The model will refuse to emit anything outside a valid JSON object. `qwen3.6:27b-coding-mxfp8` is the dense coder on m5-max and is the best at structured JSON output. Set `"think": false` in the request body if calling via the API to suppress the thinking field; `qwen3.6:35b` on either host also handles JSON well if you want the lighter MoE general-purpose model.
 - For 100+ PDFs, copy the folder to the Mac first (`rsync -av papers/ m5-max:~/papers/`) and run the loop over SSH so the data isn't crossing the wire per-file.
 
 When to escalate: I have cloud Claude review 3 sample JSONs against the source PDFs to catch systematic extraction bugs before I trust the rest.
@@ -180,30 +180,31 @@ ssh -L 11500:localhost:11434 m5-max
 
 | Model | Hosts | Use it for |
 |-------|-------|------------|
-| `qwen3.5:35b-a3b-nvfp4` | m5-max, m5-pro | General default. Prose, code drafts, structured extraction. Fast (MoE). |
-| `qwen3.5:35b-a3b-coding-nvfp4` | m5-max, m5-pro | Coding-tuned variant of the default. |
-| `qwen3.5:27b-q8_0` | m5-max, m5-pro | High-precision dense Q8 for structured extraction. Specialist, slower. |
-| `qwen3.6:27b-coding-mxfp8` | m5-max | Dense coder. Strong at JSON / structured output. |
-| `qwen3.6:35b-a3b-coding-nvfp4` | m5-max | Fast MoE coder for agentic loops on heavy hardware. |
+| `qwen3.6:35b` | m5-max, m5-pro | General default. MoE (36B total, ~3B active), 256K context, vision + tools + thinking. Prose, code drafts, classification. Set `"think": false` for clean output. |
+| `qwen3.6:27b-coding-mxfp8` | m5-max | Dense coder. The right pick for JSON mode and high-precision structured extraction. Thinking model. |
+| `qwen3.6:35b-a3b-coding-nvfp4` | m5-max | Fast MoE coder for agentic loops and long-horizon repo work. Thinking model. |
 | `qwen2.5:72b-instruct-q4_K_M` | m5-max | Heavy dense reasoning. Use for second-opinion cross-checks. |
-| `llama3.3:70b-instruct-q4_K_M` | m5-max | Different 70B family from qwen — diverse cross-check when qwen output looks suspicious. |
-| `gemma4:31b` | m5-max, m5-pro | Vision (image input) and the trickiest reasoning. Slower, denser. |
-| `gemma4:26b` | m5-max, m5-pro | Bulk processing, multilingual, long context (256K). |
-| `gemma4:e4b` | m5-max, m5-pro | Fast triage, classification at scale, anything where latency matters more than depth. |
+| `llama3.3:70b-instruct-q4_K_M` | m5-max | Different 70B family from qwen, diverse cross-check when qwen output looks suspicious. |
+| `gemma4:31b` | m5-max, m5-pro | Vision (image input) and the trickiest reasoning. Slower, denser. Thinking model. |
+| `gemma4:26b` | m5-max, m5-pro | Bulk processing, multilingual, long context (256K). Wins RealWorldQA on real-world image reasoning. Thinking model. |
+| `gemma4:e4b` | m5-max, m5-pro | Fast triage, classification at scale, anything where latency matters more than depth. Thinking model. |
+| `gemma4:31b-nvfp4` | m5-pro | Text-only MLX-accelerated `gemma4:31b` (no vision). Faster TTFT and tokens/sec on Apple Silicon. |
+| `gemma4:26b-nvfp4` | m5-pro | Text-only MLX-accelerated `gemma4:26b` (no vision). |
+| `gemma4:e4b-nvfp4` | m5-pro | Text-only MLX-accelerated `gemma4:e4b` (no vision). |
 | `nomic-embed-text` | m5-max, m5-pro | English embeddings. 768-dim, 8K context. Use via `/api/embed`. |
 | `bge-m3` | m5-max | Multilingual embeddings. |
 
-Most student-facing models live on both hosts — if `m5-max` is busy I switch the same call to `m5-pro` (or the reverse) without changing the model name. `qwen3.5:35b-a3b-nvfp4` is the right answer 80% of the time; reach for the M5 Max-only heavy fleet (`qwen2.5:72b`, `llama3.3:70b`, `qwen3.6:27b-coding-mxfp8`, `qwen3.6:35b-a3b-coding-nvfp4`) when the task wants more horsepower or a non-qwen voice for cross-checking.
+Most student-facing models live on both hosts. If `m5-max` is busy I switch the same call to `m5-pro` (or the reverse) without changing the model name. `qwen3.6:35b` is the right answer 80% of the time; reach for the M5 Max-only heavy fleet (`qwen2.5:72b`, `llama3.3:70b`, `qwen3.6:27b-coding-mxfp8`, `qwen3.6:35b-a3b-coding-nvfp4`) when the task wants more horsepower, dense-coder precision for JSON, or a non-qwen voice for cross-checking. The NVFP4 gemma4 companions on `m5-pro` are the fast text-only path when latency matters and I don't need vision.
 
-**MLX-accelerated gemma4 (faster on Apple Silicon):** for every gemma4 size, there's an `-nvfp4` MLX-format companion tag — same weights, same disk cost, but routed through Apple's MLX framework. Use these for new code:
+**MLX-accelerated gemma4 (faster on Apple Silicon):** every gemma4 size has an `-nvfp4` MLX-format companion tag on `m5-pro` (`gemma4:31b-nvfp4`, `gemma4:26b-nvfp4`, `gemma4:e4b-nvfp4`). Same weights, same disk footprint, but routed through Apple's MLX framework instead of llama.cpp. Faster TTFT and tokens/sec. Prefer these for new text-only code:
 
 ```bash
-# Faster (MLX) on Apple Silicon
-ssh m5-max 'ollama run gemma4:31b-nvfp4 "..."'
+# Faster (MLX) on Apple Silicon, text-only
+ssh m5-pro 'ollama run gemma4:31b-nvfp4 "..."'
 ssh m5-pro 'ollama run gemma4:e4b-nvfp4 "..."'
 ```
 
-The plain `gemma4:31b` / `gemma4:26b` / `gemma4:e4b` tags stay available for compatibility, but the `-nvfp4` variants give better TTFT and tokens/sec. The qwen3.5 family is already MLX-routed via its canonical `-nvfp4` quantization — no separate variant to chase. The 70B+ heavy models (qwen2.5:72b, llama3.3:70b) and qwen3.6:27b-coding-mxfp8 are GGUF-only on the public Ollama hub for now.
+One catch: the NVFP4 builds drop the vision tower, so for image input stay on the plain `gemma4:31b` / `gemma4:26b` / `gemma4:e4b` tags. The qwen3.6 family is already MLX-routed where the canonical tag carries an MLX quant (the `-nvfp4` and `-mxfp8` coders on `m5-max`); for `qwen3.6:35b` itself the canonical tag is GGUF and there's no companion to chase. The 70B+ heavy models (qwen2.5:72b, llama3.3:70b) are GGUF-only on the public Ollama hub for now.
 
 A note on thinking models: every model in the table except the embedders emits a `thinking` field alongside the main response. When I use `ollama run` interactively, that's already handled. When I call the API directly, I either set `"think": false` in the request body (cleanest) or read both `message.content` and `message.thinking`.
 
@@ -211,15 +212,15 @@ A note on thinking models: every model in the table except the embedders emits a
 
 Jay runs two scheduled jobs against the lab. They use qwen3.6 family tags:
 
-- `qwen3.6:35b` and its alias `qwen3.6:latest` — same weights.
+- `qwen3.6:35b` and its alias `qwen3.6:latest` (same weights).
 - `qwen3.6:35b-a3b-nvfp4`.
 
 Schedule:
 
-- **PsychRX news aggregation** — daily, around 7 AM PT.
-- **Weekly smoking-cessation digest** — once a week.
+- **PsychRX news aggregation**: daily, around 7 AM PT.
+- **Weekly smoking-cessation digest**: once a week.
 
-Nothing's reserved; I can call any of these tags. The only thing to know is that if a cron fires while my call is in flight, my call and the cron share the daemon's parallel slot (queues briefly); and if I've loaded other large models recently and evicted these from VRAM, the cron pays a 20-40 second cold-load on first run. Neither is a failure mode — just FYI so I can avoid the cron windows if I'm running something latency-sensitive.
+Nothing's reserved; I can call any of these tags. The only thing to know is that if a cron fires while my call is in flight, my call and the cron share the daemon's parallel slot (queues briefly); and if I've loaded other large models recently and evicted these from VRAM, the cron pays a 20-40 second cold-load on first run. Neither is a failure mode, just FYI so I can avoid the cron windows if I'm running something latency-sensitive.
 
 ## Etiquette
 
@@ -233,9 +234,9 @@ There's no queue gate, no rate limit, no quota. Just shared hardware. So:
 
 ## When something goes wrong
 
-- **`ssh m5-max` fails.** First check `tailscale status`. Am I connected to the tailnet? If yes, try the full hostname (`georges-macbook-pro` for m5-max, `sophies-macbook-pro` for m5-pro) instead of the alias. If `Permission denied`, double-check the password Jay sent — capitalization and exclamation matter.
+- **`ssh m5-max` fails.** First check `tailscale status`. Am I connected to the tailnet? If yes, try the full hostname (`georges-macbook-pro` for m5-max, `sophies-macbook-pro` for m5-pro) instead of the alias. If `Permission denied`, double-check the password Jay sent (capitalization and exclamation matter).
 - **SSH hangs even with Tailscale connected.** A VPN on my laptop (Cloudflare WARP, NordVPN, ExpressVPN, etc.) is intercepting Tailscale's routing. Turn the VPN off and try again.
-- **`ollama run` says "model not found".** The host may not have the tag I asked for — `qwen3.5` family is m5-pro only, `qwen3.6` heavy / `qwen2.5:72b` / `llama3.3:70b` / `bge-m3` are m5-max only. Check `ollama list` on the host I'm hitting.
+- **`ollama run` says "model not found".** The host may not have the tag I asked for. The qwen3.6 coders (`qwen3.6:27b-coding-mxfp8`, `qwen3.6:35b-a3b-coding-nvfp4`), the 70B+ models (`qwen2.5:72b`, `llama3.3:70b`), and `bge-m3` are m5-max only. The gemma4 NVFP4 companions (`gemma4:31b-nvfp4`, `gemma4:26b-nvfp4`, `gemma4:e4b-nvfp4`) are m5-pro only. Everything else (`qwen3.6:35b`, plain gemma4 tags, `nomic-embed-text`) lives on both hosts. Check `ollama list` on the host I'm hitting.
 - **A call hangs.** The model may be loading from disk (first call after idle), or another job is holding the GPU. Check `ssh m5-max 'ps aux | grep ollama'` and give it a minute.
 - **Port 11434 in use locally.** Forward to a different port (see Recipe 4).
 

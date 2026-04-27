@@ -28,6 +28,8 @@ https://login.tailscale.com/...
 2. Sign in with the email Jay invited (Google or Microsoft account on that address both work).
 3. Approve joining Jay's tailnet.
 
+One small thing to know: after you accept the invite, Jay still has to approve your account on his end before you actually show up on the tailnet. This usually takes a few minutes once you ping him. If you try to SSH right after accepting and get `Permission denied`, that is almost certainly why, just give him a nudge.
+
 You are now a member of the network. The lab hosts will show up for you and only for you.
 
 ---
@@ -68,7 +70,7 @@ You should see the lab hosts (`georges-macbook-pro`, `sophies-macbook-pro`) in t
 ssh student@georges-macbook-pro
 ```
 
-Type the shared `student` password Jay sent you privately. You are now in `student@georges-macbook-pro ~ %` — a shared lab account.
+Type the shared `student` password Jay sent you privately. You are now in `student@georges-macbook-pro ~ %`, a shared lab account.
 
 The same pattern works for M5 Pro:
 
@@ -92,7 +94,7 @@ ollama run gemma4:e4b "summarize the Treaty of Westphalia in 3 bullets"
 For longer prompts, pipe stdin from your laptop:
 
 ```
-cat my-prompt.txt | ssh student@georges-macbook-pro 'ollama run qwen3.6:35b-a3b-coding-nvfp4'
+cat my-prompt.txt | ssh student@georges-macbook-pro 'ollama run qwen3.6:35b'
 ```
 
 For programmatic API access (the Ollama HTTP API on port 11434), open a port-forward in another terminal:
@@ -101,7 +103,7 @@ For programmatic API access (the Ollama HTTP API on port 11434), open a port-for
 ssh -L 11434:localhost:11434 student@georges-macbook-pro
 ```
 
-Now anything on your laptop pointed at `http://localhost:11434` is talking to that host's Ollama daemon — the Ollama Python/JS SDKs, the OpenAI SDK with `base_url` overridden, Continue in VS Code, and so on.
+Now anything on your laptop pointed at `http://localhost:11434` is talking to that host's Ollama daemon: the Ollama Python/JS SDKs, the OpenAI SDK with `base_url` overridden, Continue in VS Code, and so on.
 
 ---
 
@@ -127,26 +129,27 @@ Claude Code's VS Code extension can target either your local workspace or the re
 
 ## Available models
 
-Most student-facing models live on **both** hosts so you can route around contention — if M5 Max is busy with someone else's job, the same model is available on M5 Pro and vice versa. M5 Max additionally carries the heavy 70B+ cross-check fleet (qwen2.5:72b, llama3.3:70b) plus multilingual embeddings (bge-m3); the rest is symmetric.
+Most student-facing models live on **both** hosts so you can route around contention. If M5 Max is busy with someone else's job, the same model is often available on M5 Pro and vice versa. M5 Max additionally carries the heavy 70B+ cross-check fleet (qwen2.5:72b, llama3.3:70b), the qwen3.6 coders, and multilingual embeddings (bge-m3); the gemma4 family is the symmetric layer.
 
 | Model | Hosts | Use it for |
 |---|---|---|
-| `qwen3.5:35b-a3b-nvfp4` | m5-max, m5-pro | **General-purpose default.** Fast MoE (35B total, 3B active). Reach for this first. Thinking model: read both `content` and `thinking` fields. |
-| `qwen3.5:35b-a3b-coding-nvfp4` | m5-max, m5-pro | Coding-tuned variant of the default. |
-| `qwen3.5:27b-q8_0` | m5-max, m5-pro | High-precision structured extraction. Specialist, slower. |
-| `qwen3.6:27b-coding-mxfp8` | m5-max | Dense coder. Strong at JSON / structured extraction. |
-| `qwen3.6:35b-a3b-coding-nvfp4` | m5-max | Fast MoE coder for agentic loops on heavy hardware. |
+| `qwen3.6:35b` | m5-max, m5-pro | **General-purpose default.** MoE (36B total, ~3B active), 256K context, vision + tools + thinking. Reach for this first. Set `"think": false` in the request body for clean output. |
+| `qwen3.6:27b-coding-mxfp8` | m5-max | Dense coder. The right pick for JSON mode and high-precision structured extraction. Thinking model. |
+| `qwen3.6:35b-a3b-coding-nvfp4` | m5-max | Fast MoE coder for agentic loops and long-horizon repo work. Thinking model. |
 | `qwen2.5:72b-instruct-q4_K_M` | m5-max | Heavy dense reasoning. Use for second-opinion cross-checks. |
-| `llama3.3:70b-instruct-q4_K_M` | m5-max | Different 70B family from qwen — use when you want a diverse cross-check. |
+| `llama3.3:70b-instruct-q4_K_M` | m5-max | Different 70B family from qwen, useful when you want a diverse cross-check. |
 | `gemma4:31b` | m5-max, m5-pro | **Vision** (image input) and tricky reasoning. Slower, very capable. Thinking model. |
-| `gemma4:26b` | m5-max, m5-pro | Bulk processing, multilingual, vision fallback. 256K context. Thinking model. |
+| `gemma4:26b` | m5-max, m5-pro | Bulk processing, multilingual, vision fallback. 256K context. Thinking model. Wins RealWorldQA on real-world image reasoning. |
 | `gemma4:e4b` | m5-max, m5-pro | **Fast triage and classification.** Use when you have thousands of small jobs. Thinking model. |
+| `gemma4:31b-nvfp4` | m5-pro | Text-only MLX-accelerated `gemma4:31b` (no vision). Faster TTFT and tokens/sec on Apple Silicon. |
+| `gemma4:26b-nvfp4` | m5-pro | Text-only MLX-accelerated `gemma4:26b` (no vision). |
+| `gemma4:e4b-nvfp4` | m5-pro | Text-only MLX-accelerated `gemma4:e4b` (no vision). |
 | `nomic-embed-text` | m5-max, m5-pro | **English embeddings.** Call via `/api/embed`. |
 | `bge-m3` | m5-max | **Multilingual embeddings.** |
 
-**Faster gemma4 on Apple Silicon (MLX):** every gemma4 size has an MLX-format companion tag — `gemma4:31b-nvfp4`, `gemma4:26b-nvfp4`, `gemma4:e4b-nvfp4` — same weights, same disk footprint, but routed through Apple's MLX framework instead of llama.cpp. Faster time-to-first-token and tokens-per-second on M5 Max / M5 Pro. Prefer these for new code; the plain `gemma4:31b` / `gemma4:26b` / `gemma4:e4b` tags stay around for compatibility with older recipes. The qwen3.5 family already runs on MLX via the `-nvfp4` suffix on the canonical tags.
+**Faster gemma4 on Apple Silicon (MLX):** every gemma4 size has an MLX-format companion tag (`gemma4:31b-nvfp4`, `gemma4:26b-nvfp4`, `gemma4:e4b-nvfp4`) on M5 Pro. Same weights, same disk footprint, but routed through Apple's MLX framework instead of llama.cpp. Faster time-to-first-token and tokens-per-second. Prefer these for new text-only code. One catch: the NVFP4 builds drop the vision tower, so if you're doing image input stay on the plain `gemma4:31b` / `gemma4:26b` / `gemma4:e4b` tags. The qwen3.6 family is already MLX-routed where the canonical tag carries an MLX quant (e.g. `qwen3.6:35b-a3b-coding-nvfp4`, `qwen3.6:27b-coding-mxfp8`); for `qwen3.6:35b` itself the canonical tag is GGUF and there's no companion to chase.
 
-**Heads-up — scheduled cron jobs.** Jay runs two scheduled jobs against the lab: PsychRX news aggregation (daily, around 7 AM PT) and a weekly smoking-cessation digest. Both use qwen3.6 family tags — `qwen3.6:35b`, `qwen3.6:latest`, and `qwen3.6:35b-a3b-nvfp4`. Nothing is reserved; calling these is fine and the daemon will serve them happily. The only cost: if a cron fires while you're using one, the cron queues briefly behind your request; if you've loaded other large models recently, the cron may pay a 20-40 second cold-load on first run. No breakage, just an FYI so you can avoid the cron windows if you want.
+**Heads-up, scheduled cron jobs.** Jay runs two scheduled jobs against the lab: PsychRX news aggregation (daily, around 7 AM PT) and a weekly smoking-cessation digest. Both use qwen3.6 family tags, specifically `qwen3.6:35b` and its alias `qwen3.6:latest`. Nothing is reserved; calling these is fine and the daemon will serve them happily. The only cost: if a cron fires while you're using one, the cron queues briefly behind your request; if you've loaded other large models recently, the cron may pay a 20-40 second cold-load on first run. No breakage, just an FYI so you can avoid the cron windows if you want.
 
 To see what is loaded on a host right now:
 
