@@ -207,22 +207,19 @@ The plain `gemma4:31b` / `gemma4:26b` / `gemma4:e4b` tags stay available for com
 
 A note on thinking models: every model in the table except the embedders emits a `thinking` field alongside the main response. When I use `ollama run` interactively, that's already handled. When I call the API directly, I either set `"think": false` in the request body (cleanest) or read both `message.content` and `message.thinking`.
 
-## Lab model routing — reserved tags
+## Heads-up: scheduled cron jobs
 
-Three model tags are reserved for Jay's scheduled batch jobs (PsychRX cron, DentalSchool Fit synthesis, LSTS Vietnamese translation, weekly smoke-cessation digest). Do **not** call any of these from this project:
+Jay runs two scheduled jobs against the lab. They use qwen3.6 family tags:
 
-- `qwen3.6:35b`
-- `qwen3.6:latest` (alias of the above; same weights)
-- `qwen3.6:35b-a3b-nvfp4`
+- `qwen3.6:35b` and its alias `qwen3.6:latest` — same weights.
+- `qwen3.6:35b-a3b-nvfp4`.
 
-If a recipe targets a reserved tag, switch to the equivalent before running:
+Schedule:
 
-| If reaching for…                     | Use instead                                                                          |
-|--------------------------------------|--------------------------------------------------------------------------------------|
-| `qwen3.6:35b` for general/vision     | `qwen3.5:35b-a3b-nvfp4` on m5-pro, or `gemma4:26b` / `gemma4:31b` for vision         |
-| `qwen3.6:35b-a3b-nvfp4` (MoE)        | `qwen3.5:35b-a3b-nvfp4` on m5-pro, or `qwen3.6:35b-a3b-coding-nvfp4` for coding work |
+- **PsychRX news aggregation** — daily, around 7 AM PT.
+- **Weekly smoking-cessation digest** — once a week.
 
-Hitting a reserved tag won't fail technically — but it can evict Jay's warmed copy from VRAM, costing him a 20-40 second cold-load on his next cron. Be a good neighbor.
+Nothing's reserved; I can call any of these tags. The only thing to know is that if a cron fires while my call is in flight, my call and the cron share the daemon's parallel slot (queues briefly); and if I've loaded other large models recently and evicted these from VRAM, the cron pays a 20-40 second cold-load on first run. Neither is a failure mode — just FYI so I can avoid the cron windows if I'm running something latency-sensitive.
 
 ## Etiquette
 
